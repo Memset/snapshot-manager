@@ -7,26 +7,29 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path"
 	"strings"
 
+	"github.com/memset/snapshot-manager/snapshot"
 	"github.com/ncw/swift"
 )
 
 // Globals
 var (
 	// Flags
-	chunkSize = flag.Int64("s", 64*1024*1024, "Size of the chunks to make")
+	chunkSize = flag.Int("s", 64*1024*1024, "Size of the chunks to make")
 	userName  = flag.String("user", "", "Memstore user name, eg myaccaa1.admin")
 	apiKey    = flag.String("api-key", "", "Memstore api key")
 	authUrl   = flag.String("auth-url", "https://auth.storage.memset.com/v1.0", "Swift Auth URL - default should be OK for Memstore")
-	// Swift connection
-	c = new(swift.Connection)
+	// Snapshot manager
+	sm *snapshot.Manager
 )
 
 // List the snapshots available
 func listSnapshots() {
-	snapshots := getSnapshots()
+	snapshots, err := sm.List()
+	if err != nil {
+		log.Fatalf("List failed: %v", err)
+	}
 	if len(snapshots) == 0 {
 		fmt.Println("No snapshots found")
 		return
@@ -38,86 +41,35 @@ func listSnapshots() {
 
 // Download a snapshot
 func downloadSnaphot(name string) {
-	objects := getSnapshotObjects(name)
-	if len(objects) == 0 {
-		log.Fatal("Snapshot or snapshot objects not found")
-	}
-	err := os.MkdirAll(name, 0755)
+	s, err := sm.ReadSnapshot(name)
 	if err != nil {
-		log.Fatalf("Failed to make output directory %q", name)
+		log.Fatalf("Failed to read snapshot: %v", err)
 	}
-	err = os.Chdir(name)
+	err = s.Get(name)
 	if err != nil {
-		log.Fatalf("Failed chdir output directory %q", name)
-	}
-	for _, object := range objects {
-		if object.PseudoDirectory {
-			continue
-		}
-		objectPath := object.Name
-		leaf := path.Base(objectPath)
-		fmt.Printf("Downloading %s\n", objectPath)
-		out, err := os.Create(leaf)
-		if err != nil {
-			log.Fatalf("Failed to open output file %q: %v", leaf, err)
-		}
-		_, err = c.ObjectGet(snapshotContainer, objectPath, out, false, nil) // don't check MD5 because they are wrong for chunked files
-		if err != nil {
-			log.Fatalf("Failed to download %q: %v", name, err)
-		}
-		err = out.Close()
-		if err != nil {
-			log.Fatalf("Failed to close %q: %v", name, err)
-		}
+		log.Fatalf("Failed to get snapshot: %v", err)
 	}
 }
 
 // Upload a snapshot
 func uploadSnaphot(name, file string) {
-	leaf := strings.ToLower(path.Base(file))
-	Path := name + "/" + leaf
-
-	snapshot := &Snapshot{
-		Name:       name,
-		Path:       Path,
-		Comment:    fmt.Sprintf("Uploaded from original file '%s'", file),
-		Broken:     false,
-		ImageLeaf:  leaf,
-		Miniserver: "uploaded",
+	s := sm.NewSnapshotForUpload(name, file)
+	log.Printf("Uploading snapshot")
+	err := s.Put(file)
+	if err != nil {
+		log.Fatalf("Failed to upload snapshot: %v", err)
 	}
-
-	fmt.Printf("Uploading snapshot\n")
-	snapshot.List()
-
-	snapshot.Put(file)
 }
 
 // Delete a snapshot
 func deleteSnaphot(name string) {
-	objects, err := c.Objects(snapshotContainer, &swift.ObjectsOpts{
-		Prefix: name + "/",
-	})
+	s, err := sm.ReadSnapshot(name)
 	if err != nil {
-		log.Fatalf("Failed to read snapshot %q: %v", name, err)
+		log.Fatalf("Failed to read snapshot: %v", err)
 	}
-	if len(objects) == 0 {
-		log.Fatalf("Snapshot or snapshot objects not found")
-	}
-
-	errors := 0
-	for _, object := range objects {
-		if object.PseudoDirectory {
-			continue
-		}
-		log.Printf("Deleting %q", object.Name)
-		err = c.ObjectDelete(snapshotContainer, object.Name)
-		if err != nil {
-			errors += 1
-			log.Printf("Failed to delete %q: %v", object.Name, err)
-		}
-	}
-	if errors != 0 {
-		log.Fatalf("Failed to delete %d objects", errors)
+	err = s.Delete()
+	if err != nil {
+		log.Fatalf("Failed to delete snapshot: %v", err)
 	}
 }
 
@@ -194,22 +146,31 @@ func main() {
 	case "types":
 		checkArgs(0)
 		fn = func() {
-			listSnapshotTypes(os.Stdout)
+			snapshot.Types.List(os.Stdout)
 		}
 	default:
 		fatalf("Command %q not understood", command)
 	}
 
 	// Create a v1 auth connection
-	c.UserName = *userName
-	c.ApiKey = *apiKey
-	c.AuthUrl = *authUrl
+	c := swift.Connection{
+		UserName: *userName,
+		ApiKey:   *apiKey,
+		AuthUrl:  *authUrl,
+	}
 
 	// Authenticate
 	err := c.Authenticate()
 	if err != nil {
 		log.Fatalf("Failed to log in to Memstore: %v", err)
 	}
+
+	// Create the manager
+	sm = &snapshot.Manager{
+		Swift:     &c,
+		ChunkSize: *chunkSize,
+	}
+	sm.Init()
 
 	// Run the command
 	fn()
