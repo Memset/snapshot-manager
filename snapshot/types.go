@@ -14,16 +14,14 @@ type Type struct {
 	Comment        string
 	ImageType      string // for README.txt
 	MimeType       string
+	NeedsGzip      bool
+	NeedsGunzip    bool
 }
 
 // A list of types
 type types []Type
 
 // A list of snapshot types
-//
-// FIXME allow .tar.gz & .tgz ?
-// FIXME does .raw.gz work?
-// FIXME allow .raw?
 var Types = types{
 	{
 		Suffix:         ".tar",
@@ -34,12 +32,30 @@ var Types = types{
 		MimeType:       "application/x-tar",
 	},
 	{
+		Suffix:         ".tar.gz",
+		Upload:         true,
+		Virtualisation: "Paravirtualisation - Linux only",
+		Comment:        "A tar of whole file system",
+		ImageType:      "Tarball file",
+		MimeType:       "application/x-tar",
+		NeedsGunzip:    true,
+	},
+	{
 		Suffix:         ".raw.gz",
 		Upload:         true,
 		Virtualisation: "Full virtualisation with PV Drivers",
 		Comment:        "A raw disk image including partitions, gzipped",
 		ImageType:      "gzipped Raw file",
 		MimeType:       "x-application/x-gzip",
+	},
+	{
+		Suffix:         ".raw",
+		Upload:         true,
+		Virtualisation: "Full virtualisation with PV Drivers",
+		Comment:        "A raw disk image including partitions",
+		ImageType:      "gzipped Raw file",
+		MimeType:       "x-application/x-gzip",
+		NeedsGzip:      true,
 	},
 	{
 		Suffix:         ".xmbr",
@@ -65,14 +81,14 @@ var Types = types{
 		ImageType:      "VHD",
 		MimeType:       "application/vhd",
 	},
-	{
-		Suffix:         ".qcow2",
-		Upload:         true,
-		Virtualisation: "Full virtualisation with PV Drivers",
-		Comment:        "Raw disk image with partitions, QCOW2 format",
-		ImageType:      "QCOW2",
-		MimeType:       "application/octet-stream",
-	},
+	// {
+	// 	Suffix:         ".qcow2",
+	// 	Upload:         true,
+	// 	Virtualisation: "Full virtualisation with PV Drivers",
+	// 	Comment:        "Raw disk image with partitions, QCOW2 format",
+	// 	ImageType:      "QCOW2",
+	// 	MimeType:       "application/octet-stream",
+	// },
 }
 
 // Finds the best match for Type for the file passed in

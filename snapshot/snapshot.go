@@ -1,8 +1,9 @@
-// A library Manage Memset snapshots
+// A library to Manage Memset snapshots
 package snapshot
 
 import (
 	"bytes"
+	"compress/gzip"
 	"fmt"
 	"io"
 	"log"
@@ -155,35 +156,26 @@ func (s *Snapshot) CreateReadme() {
 	s.ReadMe = out.String()
 }
 
-// putChunkedFile puts file of size to continer/obectPath storing the chunks in chunksContainer/chunksPath
-func (s *Snapshot) putChunkedFile(file string, size int64, container, objectPath string, chunksContainer, chunksPath string, mimeType string) error {
-	// Open input file
-	in, err := os.Open(file)
-	if err != nil {
-		return fmt.Errorf("failed to open %q: %v", file, err)
-	}
-	defer in.Close()
-
+// putChunkedFile puts in to continer/obectPath storing the chunks in chunksContainer/chunksPath
+func (s *Snapshot) putChunkedFile(in io.Reader, container, objectPath string, chunksContainer, chunksPath string, mimeType string) error {
 	// Read chunks from the file
-	chunk := 1
 	buf := make([]byte, s.Manager.ChunkSize)
-	for size > 0 {
-		if size < int64(len(buf)) {
-			buf = buf[:size]
-		}
+	for finished, chunk := false, 1; !finished; chunk++ {
 		n, err := io.ReadFull(in, buf)
-		if err != nil {
-			return fmt.Errorf("error reading %q: %v", file, err)
+		if err == io.EOF {
+			break
+		} else if err == io.ErrUnexpectedEOF {
+			finished = true
+		} else if err != io.ErrUnexpectedEOF && err != nil {
+			return fmt.Errorf("error reading %v", err)
 		}
-		size -= int64(n)
 		chunkPath := fmt.Sprintf("%s/%04d", chunksPath, chunk)
 		// FIXME retry
 		log.Printf("Uploading chunk %q", chunkPath)
-		err = s.Manager.Swift.ObjectPutBytes(container, chunkPath, buf, mimeType)
+		err = s.Manager.Swift.ObjectPutBytes(container, chunkPath, buf[:n], mimeType)
 		if err != nil {
 			return fmt.Errorf("failed to upload chunk %q: %v", chunkPath, err)
 		}
-		chunk += 1
 	}
 
 	// Put the manifest if all was successful
@@ -192,8 +184,8 @@ func (s *Snapshot) putChunkedFile(file string, size int64, container, objectPath
 	headers := swift.Headers{
 		"X-Object-Manifest": chunksContainer + "/" + chunksPath,
 	}
-	_, err = s.Manager.Swift.ObjectPut(container, objectPath, contents, true, "", "application/octet-stream", headers)
-	return nil
+	_, err := s.Manager.Swift.ObjectPut(container, objectPath, contents, true, "", "application/octet-stream", headers)
+	return err
 }
 
 // Download a snapshot into outputDirectory
@@ -233,8 +225,17 @@ func (s *Snapshot) Get(outputDirectory string) error {
 	return nil
 }
 
+// checkClose is used to check the return from Close in a defer
+// statement.
+func checkClose(c io.Closer, err *error) {
+	cerr := c.Close()
+	if *err == nil {
+		*err = cerr
+	}
+}
+
 // Puts a snapshot
-func (s *Snapshot) Put(file string) error {
+func (s *Snapshot) Put(file string) (err error) {
 	// Work out where to put things
 	leaf := s.ImageLeaf
 	Type := Types.Find(file)
@@ -246,6 +247,7 @@ func (s *Snapshot) Put(file string) error {
 	}
 	s.ImageType = Type.ImageType
 	chunksPath := s.Name + "/" + leaf[:len(leaf)-len(Type.Suffix)]
+	objectPath := s.Path
 
 	// Get file stat
 	fi, err := os.Stat(file)
@@ -272,7 +274,56 @@ func (s *Snapshot) Put(file string) error {
 	}
 
 	// Upload the file with chunks
-	err = s.putChunkedFile(file, fi.Size(), s.Manager.Container, s.Path, s.Manager.Container, chunksPath, Type.MimeType)
+	var in io.ReadCloser
+	fileIn, err := os.Open(file)
+	if err != nil {
+		return fmt.Errorf("failed to open %q: %v", file, err)
+	}
+	in = fileIn
+	defer checkClose(fileIn, &err)
+	// FIXME adjust names...
+	if Type.NeedsGunzip {
+		log.Printf("Gunzipping on the fly")
+		objectPath = objectPath[:len(objectPath)-3]
+		var gzipRd io.ReadCloser
+		gzipRd, err = gzip.NewReader(in)
+		if err != nil {
+			return fmt.Errorf("failed to make gzip compressor: %v", err)
+		}
+		defer checkClose(gzipRd, &err)
+		in = gzipRd
+	}
+	if Type.NeedsGzip {
+		log.Printf("Gzipping on the fly")
+		objectPath += ".gz"
+		// Pump data into gzip.Writer through the pipe and
+		// give a reader to putChunkedFile
+		pipeRd, pipeWr := io.Pipe()
+		var gzipWr io.WriteCloser
+		gzipWr, err = gzip.NewWriterLevel(pipeWr, 6)
+		copyErrs := make(chan error, 3)
+		// Wait for the pump to exit and return its error
+		defer func() {
+			for copyErr := range copyErrs {
+				if copyErr != nil && err != nil {
+					err = copyErr
+				}
+			}
+			checkClose(pipeRd, &err)
+		}()
+		// Pump the data through the pipe
+		go func() {
+			_, copyErr := io.Copy(gzipWr, fileIn)
+			copyErrs <- copyErr
+			copyErrs <- gzipWr.Close()
+			copyErrs <- pipeWr.Close()
+			close(copyErrs)
+		}()
+		in = pipeRd
+	}
+
+	// Put the file in chunks
+	err = s.putChunkedFile(in, s.Manager.Container, objectPath, s.Manager.Container, chunksPath, Type.MimeType)
 	if err != nil {
 		return err
 	}
