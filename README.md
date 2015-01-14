@@ -18,21 +18,6 @@ Features
   * Download an existing snapshot
   * Delete an existing snapshot
 
-
-FIXME
------
-
-Extra notes
-
-raw for upload and download
- - How to improve performance for raw snapshots
- - http://www.memset.com/blog/improving-raw-snapshots-performance/
-
-tar for upload and download
- - must have started with a memset image
-
-Update snapshot types
-
 Install
 -------
 
@@ -196,14 +181,36 @@ manager can deal with like this.
 Note carefully the different virtualization types for each image.  Not
 all image formats can be uploaded.
 
+raw or raw.gz are the recommended formats for full virtualization
+uploads.  These are supported by all virtualization systems, but may
+need some conversion.  Then can also be quite large - see [How to
+improve performance for raw
+snapshots](http://www.memset.com/blog/improving-raw-snapshots-performance/)
+to learn how to make smaller raw images.  These are always stored
+compressed.
+
+tar or tar.gz are the recommended formats for paravirtualized Linux
+uploads. If you are making one of these then we recommend you start
+with a Memset image as these are customized to enable networking and
+serial console to work.
+
+
 ```
 .tar - Tarball file
+  Upload:         true
+  Comment:        A tar of whole file system
+  Virtualisation: Paravirtualisation - Linux only
+.tar.gz - Tarball file
   Upload:         true
   Comment:        A tar of whole file system
   Virtualisation: Paravirtualisation - Linux only
 .raw.gz - gzipped Raw file
   Upload:         true
   Comment:        A raw disk image including partitions, gzipped
+  Virtualisation: Full virtualisation with PV Drivers
+.raw - gzipped Raw file
+  Upload:         true
+  Comment:        A raw disk image including partitions
   Virtualisation: Full virtualisation with PV Drivers
 .xmbr - gzipped NTFS Image file
   Upload:         false
@@ -216,10 +223,6 @@ all image formats can be uploaded.
 .vhd - VHD
   Upload:         false
   Comment:        Raw disk image with partitions, VMDK format
-  Virtualisation: Full virtualisation with PV Drivers
-.qcow2 - QCOW2
-  Upload:         true
-  Comment:        Raw disk image with partitions, QCOW2 format
   Virtualisation: Full virtualisation with PV Drivers
 ```
 
