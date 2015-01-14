@@ -1,6 +1,8 @@
 // A library to Manage Memset snapshots
 package snapshot
 
+// FIXME return the total bytes from putChunked and adjust the manifest appropriately with source size (if .raw) or returned size (if .raw.gz)
+
 import (
 	"bytes"
 	"compress/gzip"
@@ -281,45 +283,31 @@ func (s *Snapshot) Put(file string) (err error) {
 	}
 	in = fileIn
 	defer checkClose(fileIn, &err)
-	// FIXME adjust names...
+
+	// Check if needs gunzip
 	if Type.NeedsGunzip {
 		log.Printf("Gunzipping on the fly")
 		objectPath = objectPath[:len(objectPath)-3]
 		var gzipRd io.ReadCloser
 		gzipRd, err = gzip.NewReader(in)
 		if err != nil {
-			return fmt.Errorf("failed to make gzip compressor: %v", err)
+			return fmt.Errorf("failed to make gzip decompressor: %v", err)
 		}
 		defer checkClose(gzipRd, &err)
 		in = gzipRd
 	}
+
+	// Check if needs gzip
 	if Type.NeedsGzip {
 		log.Printf("Gzipping on the fly")
 		objectPath += ".gz"
-		// Pump data into gzip.Writer through the pipe and
-		// give a reader to putChunkedFile
-		pipeRd, pipeWr := io.Pipe()
-		var gzipWr io.WriteCloser
-		gzipWr, err = gzip.NewWriterLevel(pipeWr, 6)
-		copyErrs := make(chan error, 3)
-		// Wait for the pump to exit and return its error
-		defer func() {
-			for copyErr := range copyErrs {
-				if copyErr != nil && err != nil {
-					err = copyErr
-				}
-			}
-			checkClose(pipeRd, &err)
-		}()
-		// Pump the data through the pipe
-		go func() {
-			_, copyErr := io.Copy(gzipWr, fileIn)
-			copyErrs <- copyErr
-			copyErrs <- gzipWr.Close()
-			copyErrs <- pipeWr.Close()
-			close(copyErrs)
-		}()
-		in = pipeRd
+		var gzipRd io.ReadCloser
+		gzipRd, err = NewGzipReader(in)
+		if err != nil {
+			return fmt.Errorf("failed to make gzip compressor: %v", err)
+		}
+		defer checkClose(gzipRd, &err)
+		in = gzipRd
 	}
 
 	// Put the file in chunks
