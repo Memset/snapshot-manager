@@ -6,6 +6,7 @@ package snapshot
 import (
 	"bytes"
 	"compress/gzip"
+	"crypto/md5"
 	"fmt"
 	"io"
 	"log"
@@ -312,6 +313,7 @@ func (s *Snapshot) Put(file string) (err error) {
 	if Type.NeedsGunzip {
 		log.Printf("Gunzipping on the fly")
 		objectPath = objectPath[:len(objectPath)-3]
+		s.ImageLeaf = s.ImageLeaf[:len(s.ImageLeaf)-3]
 		var gzipRd io.ReadCloser
 		gzipRd, err = gzip.NewReader(in)
 		if err != nil {
@@ -325,6 +327,7 @@ func (s *Snapshot) Put(file string) (err error) {
 	if Type.NeedsGzip {
 		log.Printf("Gzipping on the fly")
 		objectPath += ".gz"
+		s.ImageLeaf += ".gz"
 		var gzipRd io.ReadCloser
 		gzipRd, err = NewGzipReader(in)
 		if err != nil {
@@ -334,11 +337,18 @@ func (s *Snapshot) Put(file string) (err error) {
 		in = gzipRd
 	}
 
+	// Calculate the MD5 of the uploaded object on the fly
+	hash := md5.New()
+	in = io.TeeReader(in, hash)
+
 	// Put the file in chunks
 	size, err := s.putChunkedFile(in, s.Manager.Container, objectPath, s.Manager.Container, chunksPath, Type.MimeType)
 	if err != nil {
 		return err
 	}
+
+	// Set the Md5
+	s.Md5 = fmt.Sprintf("%x", hash.Sum(nil))
 
 	// Set the DiskSize to the raw size of the upload
 	switch Type.DiskSizeFrom {
@@ -360,10 +370,10 @@ func (s *Snapshot) Put(file string) (err error) {
 		log.Printf("Can't figure out the disk size for %q - using the file size", Type.Suffix)
 		s.DiskSize = fi.Size()
 	}
-	log.Printf("Using %d as disk_size in README.txt", s.DiskSize)
 
 	// Write the README.txt
 	s.CreateReadme()
+	log.Printf("Uploading README.txt\n%s\n", s.ReadMe)
 	err = s.Manager.Swift.ObjectPutString(s.Manager.Container, s.Name+"/README.txt", s.ReadMe, "text/plain")
 	if err != nil {
 		return fmt.Errorf("failed to create README.txt: %v", err)
