@@ -6,6 +6,15 @@ import (
 	"strings"
 )
 
+type DiskSizeFrom int
+
+const (
+	DiskSizeFromUnknown = DiskSizeFrom(iota)
+	DiskSizeFromFile
+	DiskSizeFromUpload
+	DiskSizeFromGzip
+)
+
 // Describe a Type
 type Type struct {
 	Suffix         string
@@ -16,6 +25,7 @@ type Type struct {
 	MimeType       string
 	NeedsGzip      bool
 	NeedsGunzip    bool
+	DiskSizeFrom   DiskSizeFrom
 }
 
 // A list of types
@@ -30,6 +40,7 @@ var Types = types{
 		Comment:        "A tar of whole file system",
 		ImageType:      "Tarball file",
 		MimeType:       "application/x-tar",
+		DiskSizeFrom:   DiskSizeFromFile,
 	},
 	{
 		Suffix:         ".tar.gz",
@@ -39,6 +50,7 @@ var Types = types{
 		ImageType:      "Tarball file",
 		MimeType:       "application/x-tar",
 		NeedsGunzip:    true,
+		DiskSizeFrom:   DiskSizeFromUpload,
 	},
 	{
 		Suffix:         ".raw.gz",
@@ -47,6 +59,7 @@ var Types = types{
 		Comment:        "A raw disk image including partitions, gzipped",
 		ImageType:      "gzipped Raw file",
 		MimeType:       "x-application/x-gzip",
+		DiskSizeFrom:   DiskSizeFromGzip,
 	},
 	{
 		Suffix:         ".raw",
@@ -56,6 +69,7 @@ var Types = types{
 		ImageType:      "gzipped Raw file",
 		MimeType:       "x-application/x-gzip",
 		NeedsGzip:      true,
+		DiskSizeFrom:   DiskSizeFromFile,
 	},
 	{
 		Suffix:         ".xmbr",

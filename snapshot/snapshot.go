@@ -158,25 +158,29 @@ func (s *Snapshot) CreateReadme() {
 	s.ReadMe = out.String()
 }
 
-// putChunkedFile puts in to continer/obectPath storing the chunks in chunksContainer/chunksPath
-func (s *Snapshot) putChunkedFile(in io.Reader, container, objectPath string, chunksContainer, chunksPath string, mimeType string) error {
+// putChunkedFile puts in to continer/obectPath storing the chunks in
+// chunksContainer/chunksPath.  It returns the number of bytes
+// uploaded and an error
+func (s *Snapshot) putChunkedFile(in io.Reader, container, objectPath string, chunksContainer, chunksPath string, mimeType string) (int64, error) {
 	// Read chunks from the file
 	buf := make([]byte, s.Manager.ChunkSize)
+	size := int64(0)
 	for finished, chunk := false, 1; !finished; chunk++ {
 		n, err := io.ReadFull(in, buf)
+		size += int64(n)
 		if err == io.EOF {
 			break
 		} else if err == io.ErrUnexpectedEOF {
 			finished = true
 		} else if err != io.ErrUnexpectedEOF && err != nil {
-			return fmt.Errorf("error reading %v", err)
+			return size, fmt.Errorf("error reading %v", err)
 		}
 		chunkPath := fmt.Sprintf("%s/%04d", chunksPath, chunk)
 		// FIXME retry
 		log.Printf("Uploading chunk %q", chunkPath)
 		err = s.Manager.Swift.ObjectPutBytes(container, chunkPath, buf[:n], mimeType)
 		if err != nil {
-			return fmt.Errorf("failed to upload chunk %q: %v", chunkPath, err)
+			return size, fmt.Errorf("failed to upload chunk %q: %v", chunkPath, err)
 		}
 	}
 
@@ -187,7 +191,7 @@ func (s *Snapshot) putChunkedFile(in io.Reader, container, objectPath string, ch
 		"X-Object-Manifest": chunksContainer + "/" + chunksPath,
 	}
 	_, err := s.Manager.Swift.ObjectPut(container, objectPath, contents, true, "", "application/octet-stream", headers)
-	return err
+	return size, err
 }
 
 // Download a snapshot into outputDirectory
@@ -236,6 +240,15 @@ func checkClose(c io.Closer, err *error) {
 	}
 }
 
+// countWriter acts as an io.Writer counting the output
+type countWriter int64
+
+// Write counts up the data and ignores it
+func (c *countWriter) Write(p []byte) (int, error) {
+	*c += countWriter(len(p))
+	return len(p), nil
+}
+
 // Puts a snapshot
 func (s *Snapshot) Put(file string) (err error) {
 	// Work out where to put things
@@ -260,7 +273,6 @@ func (s *Snapshot) Put(file string) (err error) {
 		return fmt.Errorf("%q is a directory", file)
 	}
 	s.Date = fi.ModTime()
-	s.DiskSize = fi.Size() // FIXME not right for non raw images
 
 	// Check file doesn't exist and container does
 	ok, err := s.Exists()
@@ -276,13 +288,25 @@ func (s *Snapshot) Put(file string) (err error) {
 	}
 
 	// Upload the file with chunks
-	var in io.ReadCloser
+	var in io.Reader
 	fileIn, err := os.Open(file)
 	if err != nil {
 		return fmt.Errorf("failed to open %q: %v", file, err)
 	}
 	in = fileIn
 	defer checkClose(fileIn, &err)
+
+	// If we need to read the size from the ungzipped data then do
+	// it as we go along
+	var gzipCounter *GzipCounter
+	if Type.DiskSizeFrom == DiskSizeFromGzip {
+		log.Printf("Gunzipping on the fly to count size")
+		gzipCounter, err = NewGzipCounter()
+		if err != nil {
+			return fmt.Errorf("failed to make gzip counter: %v", err)
+		}
+		in = io.TeeReader(in, gzipCounter)
+	}
 
 	// Check if needs gunzip
 	if Type.NeedsGunzip {
@@ -311,10 +335,32 @@ func (s *Snapshot) Put(file string) (err error) {
 	}
 
 	// Put the file in chunks
-	err = s.putChunkedFile(in, s.Manager.Container, objectPath, s.Manager.Container, chunksPath, Type.MimeType)
+	size, err := s.putChunkedFile(in, s.Manager.Container, objectPath, s.Manager.Container, chunksPath, Type.MimeType)
 	if err != nil {
 		return err
 	}
+
+	// Set the DiskSize to the raw size of the upload
+	switch Type.DiskSizeFrom {
+	case DiskSizeFromUpload:
+		// .tar.gz -> .tar
+		s.DiskSize = size
+	case DiskSizeFromFile:
+		// .raw -> raw.gz
+		// .tar
+		s.DiskSize = fi.Size()
+	case DiskSizeFromGzip:
+		// .raw.gz
+		err = gzipCounter.Close()
+		if err != nil {
+			return fmt.Errorf("error closing gzip counter: %v", err)
+		}
+		s.DiskSize = gzipCounter.Size()
+	default:
+		log.Printf("Can't figure out the disk size for %q - using the file size", Type.Suffix)
+		s.DiskSize = fi.Size()
+	}
+	log.Printf("Using %d as disk_size in README.txt", s.DiskSize)
 
 	// Write the README.txt
 	s.CreateReadme()

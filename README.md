@@ -22,12 +22,6 @@ Features
 FIXME
 -----
 
-Need to supply the disk size for uploads.
-
-Can ask the user.
-
-Can read it for raw images and don't care for tar images
-
 Extra notes
 
 raw for upload and download
