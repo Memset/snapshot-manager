@@ -36,15 +36,43 @@ and this will build the binary in `$GOPATH/bin`.
 Configure
 ---------
 
-FIXME - Config file?
+At minimum snapshot-manager needs a username and password for the Memstore it operates on.
 
-FIXME instructions on where to get Memstore user name from and/or configure a limited user for Miniserver-images?
+These can be supplied as command line arguments like this
+
+    snapshot-manager -user myaccaa1.admin -password eVyjCyp4 list
+
+Or more conveniently they can be stored in a config file in your home directory.
+
+    snapshot-manager -h
+
+Will show the default location of the config file for your OS - see
+the `-config` section.  This should be a file called
+`.snapshot-manager.conf` in your home directory.  Eg
+
+    -config="/home/user/.snapshot-manager.conf": Path to config file
+
+Edit this file and put your user and password in like this:
+
+    user = myaccaa1.admin
+    password = eVyjCyp4
+
+You can then use snapshot-manager without the `-user` and `-password` parameters, eg
+
+    snapshot-manager list
+
+The examples will show this form.
+
+It is recommended that you make a user which can only access the
+`miniserver-snapshots` container for use with snapshot-manager.  See
+[the Memset Memstore
+documentation](http://www.memset.com/docs/other-memset-services/memstore/container-access-control-list/)
+for how to do that.
 
 Usage
 -----
 
 Run snapshot-manager without any parameters to see the help
-
 ```
 Manage snapshots in Memset Memstore
 
@@ -59,21 +87,29 @@ Commands
   types            - available snapshot types
 
 Full options:
-  -api-key="": Memstore api key
-  -auth-url="https://auth.storage.memset.com/v1.0": Swift Auth URL - default should be OK for Memstore
-  -s=67108864: Size of the chunks to make
+  -auth-url="https://auth.storage.memset.com/v1.0": Swift Auth URL - default is for Memstore
+  -chunk-size=67108864: Size of the chunks to make
+  -config="/home/ncw/.snapshot-manager.conf": Path to config file
+  -password="": Memstore password
   -user="": Memstore user name, eg myaccaa1.admin
-Flags -user and -api-key required
 ```
 
-You can then use the sub commands to do things
+Options can also be stored in the config file.  Any options passed in
+on the command line will override those from the config file.
+
+  * `-user` can be stored in the config file as `user = "string"`
+  * `-password` can be stored in the config file as `password = "string"`
+  * `-auth-url` can be stored in the config file as `authurl = "string"`
+  * `-s` can be stored in the config file as `chunksize = number`
+
+You can then use the sub commands to manage your snapshots.
 
 List
 ----
 
 To list your snapshots run the list command
 
-    snapshot-manager -user USER -api-key APIKEY list
+    snapshot-manager list
 
 This will list something like this showing the snapshots and some
 details about them.  The following commands take a snapshot name which
@@ -108,12 +144,12 @@ To download a snapshot use the download command.  This will create a
 directory with the name of the snapshot and download it there.  Note
 that this can take quite a long time as snapshots can be large.
 
-    snapshot-manager -user USER -api-key APIKEY download snapshot-name
+    snapshot-manager download snapshot-name
 
 Eg
 
 ```
-$ /snapshot-manager -user USER -api-key APIKEY download myacc.2015-01-08-15-44-16
+$ /snapshot-manager download myacc.2015-01-08-15-44-16
 Downloading myacc.2015-01-08-15-44-16/README.txt
 Downloading myacc.2015-01-08-15-44-16/myacc1.tar
 ```
@@ -124,7 +160,7 @@ Upload
 To upload a snapshot first prepare an image.  See the Types section
 below for acceptable image types.
 
-    snapshot-manager -user USER -api-key APIKEY upload snapshot-name /path/to/snapshot/file
+    snapshot-manager upload snapshot-name /path/to/snapshot/file
 
 You can then use this image in the web interface or the API to
 re-image a server, or to setup a new server.
@@ -132,17 +168,17 @@ re-image a server, or to setup a new server.
 Eg
 
 ```
-$ /snapshot-manager -user USER -api-key APIKEY upload new_image new_image.tar
+$ /snapshot-manager upload new_image new_image.tar
 2015/01/11 12:28:12 Uploading snapshot
-2015/01/11 12:28:12 Uploading chunk "new_image/new_image/0001"
-2015/01/11 12:28:12 Uploading chunk "new_image/new_image/0002"
-2015/01/11 12:28:13 Uploading chunk "new_image/new_image/0003"
-2015/01/11 12:28:13 Uploading chunk "new_image/new_image/0004"
+2015/01/11 12:28:12 Uploading chunk "new_image/new_image.part/0001"
+2015/01/11 12:28:12 Uploading chunk "new_image/new_image.part/0002"
+2015/01/11 12:28:13 Uploading chunk "new_image/new_image.part/0003"
+2015/01/11 12:28:13 Uploading chunk "new_image/new_image.part/0004"
 ...
-2015/01/11 12:30:11 Uploading chunk "new_image/new_image/0381"
-2015/01/11 12:30:11 Uploading chunk "new_image/new_image/0382"
-2015/01/11 12:30:11 Uploading chunk "new_image/new_image/0383"
-2015/01/11 12:30:11 Uploading chunk "new_image/new_image/0384"
+2015/01/11 12:30:11 Uploading chunk "new_image/new_image.part/0381"
+2015/01/11 12:30:11 Uploading chunk "new_image/new_image.part/0382"
+2015/01/11 12:30:11 Uploading chunk "new_image/new_image.part/0383"
+2015/01/11 12:30:11 Uploading chunk "new_image/new_image.part/0384"
 2015/01/11 12:30:11 Uploading manifest "new_image/new_image.tar"
 ```
 
@@ -151,23 +187,23 @@ Delete
 
 To delete a snapshot use the delete command.
 
-    snapshot-manager -user USER -api-key APIKEY delete snapshot-name
+    snapshot-manager delete snapshot-name
 
 Eg
 
 ```
-$ /snapshot-manager -user USER -api-key APIKEY delete new_image
+$ /snapshot-manager delete new_image
 2015/01/11 12:33:39 Deleting "new_image/README.txt"
 2015/01/11 12:33:39 Deleting "new_image/new_image.tar"
-2015/01/11 12:33:39 Deleting "new_image/new_image/0001"
-2015/01/11 12:33:39 Deleting "new_image/new_image/0002"
-2015/01/11 12:33:39 Deleting "new_image/new_image/0003"
-2015/01/11 12:33:39 Deleting "new_image/new_image/0004"
+2015/01/11 12:33:39 Deleting "new_image/new_image.part/0001"
+2015/01/11 12:33:39 Deleting "new_image/new_image.part/0002"
+2015/01/11 12:33:39 Deleting "new_image/new_image.part/0003"
+2015/01/11 12:33:39 Deleting "new_image/new_image.part/0004"
 ...
-2015/01/11 12:34:41 Deleting "new_image/new_image/0381"
-2015/01/11 12:34:41 Deleting "new_image/new_image/0382"
-2015/01/11 12:34:41 Deleting "new_image/new_image/0383"
-2015/01/11 12:34:41 Deleting "new_image/new_image/0384"
+2015/01/11 12:34:41 Deleting "new_image/new_image.part/0381"
+2015/01/11 12:34:41 Deleting "new_image/new_image.part/0382"
+2015/01/11 12:34:41 Deleting "new_image/new_image.part/0383"
+2015/01/11 12:34:41 Deleting "new_image/new_image.part/0384"
 ```
 
 Types
@@ -176,12 +212,12 @@ Types
 You can list information about the types of snapshots that snapshot
 manager can deal with like this.
 
-    snapshot-manager -user USER -api-key APIKEY types
+    snapshot-manager types
 
 Note carefully the different virtualization types for each image.  Not
 all image formats can be uploaded.
 
-raw or raw.gz are the recommended formats for full virtualization
+`raw` or `raw.gz` are the recommended formats for full virtualization
 uploads.  These are supported by all virtualization systems, but may
 need some conversion.  Then can also be quite large - see [How to
 improve performance for raw
@@ -189,7 +225,7 @@ snapshots](http://www.memset.com/blog/improving-raw-snapshots-performance/)
 to learn how to make smaller raw images.  These are always stored
 compressed.
 
-tar or tar.gz are the recommended formats for paravirtualized Linux
+`tar` or `tar.gz` are the recommended formats for paravirtualized Linux
 uploads. If you are making one of these then we recommend you start
 with a Memset image as these are customized to enable networking and
 serial console to work.

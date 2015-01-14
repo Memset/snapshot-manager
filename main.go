@@ -7,22 +7,85 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/user"
+	"path"
 	"strings"
 
+	"github.com/BurntSushi/toml"
 	"github.com/memset/snapshot-manager/snapshot"
 	"github.com/ncw/swift"
 )
 
+const (
+	configFileName   = ".snapshot-manager.conf"
+	chunkSizeDefault = 64 * 1024 * 1024
+)
+
 // Globals
 var (
-	// Flags
-	chunkSize = flag.Int("s", 64*1024*1024, "Size of the chunks to make")
-	userName  = flag.String("user", "", "Memstore user name, eg myaccaa1.admin")
-	apiKey    = flag.String("api-key", "", "Memstore api key")
-	authUrl   = flag.String("auth-url", "https://auth.storage.memset.com/v1.0", "Swift Auth URL - default should be OK for Memstore")
+	// Home directory
+	homeDir = configHome()
+	// Default config file path
+	defaultConfigPath = path.Join(homeDir, configFileName)
+	// Config file
+	configFile string
 	// Snapshot manager
 	sm *snapshot.Manager
 )
+
+var Config, flagsConfig struct {
+	User      string
+	Password  string
+	AuthUrl   string
+	ChunkSize int
+}
+
+// Flags
+func init() {
+	Config.ChunkSize = chunkSizeDefault
+	flag.StringVar(&configFile, "config", defaultConfigPath, "Path to config file")
+	flag.IntVar(&flagsConfig.ChunkSize, "chunk-size", chunkSizeDefault, "Size of the chunks to make")
+	flag.StringVar(&flagsConfig.User, "user", "", "Memstore user name, eg myaccaa1.admin")
+	flag.StringVar(&flagsConfig.Password, "password", "", "Memstore password")
+	flag.StringVar(&flagsConfig.AuthUrl, "auth-url", "https://auth.storage.memset.com/v1.0", "Swift Auth URL - default is for Memstore")
+}
+
+// Override the config file with the flags
+func overrideConfigFileWithFlags() {
+	if flagsConfig.User != "" {
+		Config.User = flagsConfig.User
+	}
+	if flagsConfig.Password != "" {
+		Config.Password = flagsConfig.Password
+	}
+	if flagsConfig.AuthUrl != "" {
+		Config.AuthUrl = flagsConfig.AuthUrl
+	}
+	if flagsConfig.ChunkSize != chunkSizeDefault {
+		Config.ChunkSize = flagsConfig.ChunkSize
+	}
+}
+
+// Find the config directory
+func configHome() string {
+	// Find users home directory
+	usr, err := user.Current()
+	if err == nil {
+		return usr.HomeDir
+	}
+	// Fall back to reading $HOME - work around user.Current() not
+	// working for cross compiled binaries on OSX.
+	// https://github.com/golang/go/issues/6376
+	home := os.Getenv("HOME")
+	if home != "" {
+		return home
+	}
+	log.Printf("Couldn't find home directory or read HOME environment variable.")
+	log.Printf("Defaulting to storing config in current directory.")
+	log.Printf("Use -config flag to workaround.")
+	log.Printf("Error was: %v", err)
+	return ""
+}
 
 // List the snapshots available
 func listSnapshots() {
@@ -105,9 +168,14 @@ func main() {
 	flag.Parse()
 	args := flag.Args()
 
-	if *userName == "" || *apiKey == "" {
-		fatalf("Flags -user and -api-key required")
+	fi, err := os.Stat(configFile)
+	if err == nil && fi.Mode().IsRegular() {
+		_, err := toml.DecodeFile(configFile, &Config)
+		if err != nil {
+			log.Fatalf("Bad config file %q: %v", configFile, err)
+		}
 	}
+	overrideConfigFileWithFlags()
 
 	if len(args) < 1 {
 		fatalf("No command supplied")
@@ -124,6 +192,7 @@ func main() {
 
 	var fn func()
 
+	needsConnection := true
 	switch command {
 	case "list":
 		checkArgs(0)
@@ -145,30 +214,39 @@ func main() {
 		}
 	case "types":
 		checkArgs(0)
+		needsConnection = false
 		fn = func() {
 			snapshot.Types.List(os.Stdout)
 		}
 	default:
+		needsConnection = false
 		fatalf("Command %q not understood", command)
 	}
 
 	// Create a v1 auth connection
 	c := swift.Connection{
-		UserName: *userName,
-		ApiKey:   *apiKey,
-		AuthUrl:  *authUrl,
+		UserName: Config.User,
+		ApiKey:   Config.Password,
+		AuthUrl:  Config.AuthUrl,
 	}
 
-	// Authenticate
-	err := c.Authenticate()
-	if err != nil {
-		log.Fatalf("Failed to log in to Memstore: %v", err)
+	// Check connection if required
+	if needsConnection {
+		if Config.User == "" || Config.Password == "" {
+			fatalf(`Flags -user and -password required or config file entries "user" and "password"`)
+		}
+
+		// Authenticate
+		err = c.Authenticate()
+		if err != nil {
+			log.Fatalf("Failed to log in to Memstore: %v", err)
+		}
 	}
 
 	// Create the manager
 	sm = &snapshot.Manager{
 		Swift:     &c,
-		ChunkSize: *chunkSize,
+		ChunkSize: Config.ChunkSize,
 	}
 	sm.Init()
 
