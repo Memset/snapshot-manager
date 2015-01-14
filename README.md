@@ -1,4 +1,4 @@
-sSnapshot Manager
+Snapshot Manager
 ================
 
 [![Logo](http://rclone.org/img/rclone-120x120.png)](http://rclone.org/)
@@ -8,7 +8,7 @@ Snapshot Manager is a command line program to manage Memset Miniserver snapshots
 See the [Memset snapshot
 documentation](http://www.memset.com/docs/managing-your-server/server-snapshots/)
 for how to create a snapshot of your Miniserver.  This tool will
-enable you to downlod the snapshots, delete old ones and upload new
+enable you to download the snapshots, delete old ones and upload new
 ones you can create new virtual machines from.
 
 Features
@@ -17,6 +17,27 @@ Features
   * Upload a new snapshot that you can create Miniservers from
   * Download an existing snapshot
   * Delete an existing snapshot
+
+
+FIXME
+-----
+
+Need to supply the disk size for uploads.
+
+Can ask the user.
+
+Can read it for raw images and don't care for tar images
+
+Extra notes
+
+raw for upload and download
+ - How to improve performance for raw snapshots
+ - http://www.memset.com/blog/improving-raw-snapshots-performance/
+
+tar for upload and download
+ - must have started with a memset image
+
+Update snapshot types
 
 Install
 -------
@@ -38,7 +59,7 @@ Configure
 
 FIXME - Config file?
 
-FIXME instructions on where to get memstore user name from and/or configure a limites user for miniserver-images?
+FIXME instructions on where to get Memstore user name from and/or configure a limited user for Miniserver-images?
 
 Usage
 -----
