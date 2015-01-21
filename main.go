@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/user"
 	"path"
+	"runtime"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -167,6 +168,9 @@ func main() {
 	flag.Usage = syntaxError
 	flag.Parse()
 	args := flag.Args()
+
+	// Allow all the processors
+	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	fi, err := os.Stat(configFile)
 	if err == nil && fi.Mode().IsRegular() {
