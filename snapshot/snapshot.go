@@ -262,7 +262,7 @@ func (s *Snapshot) Put(file string) (err error) {
 		return fmt.Errorf("can't upload snapshot type %q - use types command to see available", leaf)
 	}
 	s.ImageType = Type.ImageType
-	chunksPath := s.Name + "/" + leaf[:len(leaf)-len(Type.Suffix)]
+	chunksPath := s.Name + "/" + leaf[:len(leaf)-len(Type.Suffix)] + ".part"
 	objectPath := s.Path
 
 	// Get file stat
