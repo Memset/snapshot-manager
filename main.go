@@ -139,9 +139,11 @@ func deleteSnaphot(name string) {
 
 // syntaxError prints the syntax
 func syntaxError() {
-	fmt.Fprintf(os.Stderr, `Manage snapshots in Memset Memstore
+	fmt.Fprintf(os.Stderr, `%s version %s (C) Memset Ltd 2015
 
-snapshot-manager <command> <arguments>
+Manage snapshots in Memset Memstore
+
+%s <command> <arguments>
 
 Commands
 
@@ -152,7 +154,7 @@ Commands
   types            - available snapshot types
 
 Full options:
-`)
+`, os.Args[0], Version, os.Args[0])
 	flag.PrintDefaults()
 }
 

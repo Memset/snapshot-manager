@@ -1,8 +1,6 @@
 Snapshot Manager
 ================
 
-[![Logo](http://rclone.org/img/rclone-120x120.png)](http://rclone.org/)
-
 Snapshot Manager is a command line program to manage Memset Miniserver snapshots.
 
 See the [Memset snapshot
@@ -25,7 +23,7 @@ Snapshot Manager is a Go program and comes as a single binary file.
 
 Download the binary for your OS from
 
-  * http://snapshot-manager.memset.com/
+  * https://github.com/Memset/snapshot-manager/releases/latest
 
 Or alternatively if you have Go installed use
 
@@ -74,6 +72,8 @@ Usage
 
 Run snapshot-manager without any parameters to see the help
 ```
+snapshot-manager version v1.00 (C) Memset Ltd 2015
+
 Manage snapshots in Memset Memstore
 
 snapshot-manager <command> <arguments>
@@ -89,7 +89,7 @@ Commands
 Full options:
   -auth-url="https://auth.storage.memset.com/v1.0": Swift Auth URL - default is for Memstore
   -chunk-size=67108864: Size of the chunks to make
-  -config="/home/ncw/.snapshot-manager.conf": Path to config file
+  -config="/home/user/.snapshot-manager.conf": Path to config file
   -password="": Memstore password
   -user="": Memstore user name, eg myaccaa1.admin
 ```
@@ -270,7 +270,7 @@ COPYING file included in this package).
 
 Changelog
 ---------
-  * v1.00 - 2015-01-11
+  * v1.00 - 2015-01-26
 
 Contact and support
 -------------------
