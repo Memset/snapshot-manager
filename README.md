@@ -52,8 +52,8 @@ the `-config` section.  This should be a file called
 
 Edit this file and put your user and password in like this:
 
-    user = myaccaa1.admin
-    password = eVyjCyp4
+    user = "myaccaa1.admin"
+    password = "eVyjCyp4"
 
 You can then use snapshot-manager without the `-user` and `-password` parameters, eg
 
@@ -94,8 +94,9 @@ Full options:
   -user="": Memstore user name, eg myaccaa1.admin
 ```
 
-Options can also be stored in the config file.  Any options passed in
-on the command line will override those from the config file.
+Options can also be stored in the config file.  The config file is in
+[toml format](https://github.com/toml-lang/toml). Any options passed
+in on the command line will override those from the config file.
 
   * `-user` can be stored in the config file as `user = "string"`
   * `-password` can be stored in the config file as `password = "string"`
