@@ -14,6 +14,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ncw/swift"
@@ -163,26 +164,65 @@ func (s *Snapshot) CreateReadme() {
 // chunksContainer/chunksPath.  It returns the number of bytes
 // uploaded and an error
 func (s *Snapshot) putChunkedFile(in io.Reader, container, objectPath string, chunksContainer, chunksPath string, mimeType string) (int64, error) {
+	// Pool of buffers for upload
+	bufPool := sync.Pool{
+		New: func() interface{} {
+			return make([]byte, s.Manager.ChunkSize)
+		},
+	}
+
+	const inFlight = 2
+	type upload struct {
+		chunkPath string
+		buf       []byte
+		n         int
+	}
+	uploads := make(chan upload, inFlight)
+	errs := make(chan error, inFlight)
+
 	// Read chunks from the file
-	buf := make([]byte, s.Manager.ChunkSize)
 	size := int64(0)
-	for finished, chunk := false, 1; !finished; chunk++ {
-		n, err := io.ReadFull(in, buf)
-		size += int64(n)
-		if err == io.EOF {
-			break
-		} else if err == io.ErrUnexpectedEOF {
-			finished = true
-		} else if err != io.ErrUnexpectedEOF && err != nil {
-			return size, fmt.Errorf("error reading %v", err)
+	finished := false
+	go func() {
+		for chunk := 1; !finished; chunk++ {
+			buf := bufPool.Get().([]byte)
+			n, err := io.ReadFull(in, buf)
+			size += int64(n)
+			if err == io.EOF {
+				break
+			} else if err == io.ErrUnexpectedEOF {
+				finished = true
+			} else if err != io.ErrUnexpectedEOF && err != nil {
+				errs <- fmt.Errorf("error reading %v", err)
+				break
+			}
+			uploads <- upload{
+				chunkPath: fmt.Sprintf("%s/%04d", chunksPath, chunk),
+				buf:       buf,
+				n:         n,
+			}
 		}
-		chunkPath := fmt.Sprintf("%s/%04d", chunksPath, chunk)
-		// FIXME retry
-		log.Printf("Uploading chunk %q", chunkPath)
-		err = s.Manager.Swift.ObjectPutBytes(container, chunkPath, buf[:n], mimeType)
-		if err != nil {
-			return size, fmt.Errorf("failed to upload chunk %q: %v", chunkPath, err)
+		close(uploads)
+	}()
+
+	// Upload chunks as they come in
+	go func() {
+		for upload := range uploads {
+			// FIXME retry
+			log.Printf("Uploading chunk %q", upload.chunkPath)
+			err := s.Manager.Swift.ObjectPutBytes(container, upload.chunkPath, upload.buf[:upload.n], mimeType)
+			if err != nil {
+				errs <- fmt.Errorf("failed to upload chunk %q: %v", upload.chunkPath, err)
+			}
+			bufPool.Put(upload.buf)
 		}
+		close(errs)
+	}()
+
+	// Collect errors
+	for err := range errs {
+		finished = true
+		return size, err
 	}
 
 	// Put the manifest if all was successful
