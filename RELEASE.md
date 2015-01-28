@@ -14,6 +14,5 @@ Making a release
   * make retag
   * # Set the GOPATH for a gox enabled compiler
   * make cross
+  * git push --tags github master
   * make upload
-  * git push --tags origin master
-
