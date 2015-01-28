@@ -271,6 +271,9 @@ COPYING file included in this package).
 
 Changelog
 ---------
+  * v1.01 - 2015-01-28
+    * Parallelize compression and network transfer to speed up uploads
+    * Fix config file documentation
   * v1.00 - 2015-01-26
 
 Contact and support
