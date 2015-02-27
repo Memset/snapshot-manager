@@ -260,7 +260,7 @@ func (s *Snapshot) Get(outputDirectory string) error {
 		if err != nil {
 			return fmt.Errorf("failed to open output file %q: %v", leaf, err)
 		}
-		_, err = s.Manager.Swift.ObjectGet(s.Manager.Container, objectPath, out, false, nil) // don't check MD5 because they are wrong for chunked files
+		_, err = s.Manager.Swift.ObjectGet(s.Manager.Container, objectPath, out, true, nil)
 		if err != nil {
 			return fmt.Errorf("failed to download %q: %v", s.Name, err)
 		}
