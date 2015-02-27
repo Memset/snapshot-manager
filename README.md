@@ -271,6 +271,8 @@ COPYING file included in this package).
 
 Changelog
 ---------
+  * v1.02 - 2015-02-27
+    * Check MD5 of downloads if possible
   * v1.01 - 2015-01-28
     * Parallelize compression and network transfer to speed up uploads
     * Fix config file documentation
