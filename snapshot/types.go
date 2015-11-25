@@ -66,7 +66,7 @@ var Types = types{
 		Upload:         true,
 		Virtualisation: "Full virtualisation with PV Drivers",
 		Comment:        "A raw disk image including partitions",
-		ImageType:      "gzipped Raw file",
+		ImageType:      "Raw file",
 		MimeType:       "x-application/x-gzip",
 		NeedsGzip:      true,
 		DiskSizeFrom:   DiskSizeFromFile,
