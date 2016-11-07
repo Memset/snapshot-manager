@@ -13,7 +13,10 @@ VERSION="$1"
 
 rm -rf build
 
-gox -output "build/{{.Dir}}-${VERSION}-{{.OS}}-{{.Arch}}/{{.Dir}}"
+# Disable CGO and dynamic builds on all platforms (including build patform)
+export CGO_ENABLED=0
+
+gox --ldflags "-s" -output "build/{{.Dir}}-${VERSION}-{{.OS}}-{{.Arch}}/{{.Dir}}"
 
 mv build/snapshot-manager-${VERSION}-darwin-amd64 build/snapshot-manager-${VERSION}-osx-amd64
 mv build/snapshot-manager-${VERSION}-darwin-386 build/snapshot-manager-${VERSION}-osx-386
