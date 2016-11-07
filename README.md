@@ -271,6 +271,8 @@ COPYING file included in this package).
 
 Changelog
 ---------
+  * v1.03 - 2016-11-07
+    * Rebuild with go 1.7.3 to fix macOS Sierra
   * v1.02 - 2015-02-27
     * Check MD5 of downloads if possible
   * v1.01 - 2015-01-28
