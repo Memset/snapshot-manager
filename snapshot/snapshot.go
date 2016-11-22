@@ -197,7 +197,7 @@ func (s *Snapshot) putChunkedFile(in io.Reader, container, objectPath string, ch
 				break
 			}
 			uploads <- upload{
-				chunkPath: fmt.Sprintf("%s/%04d", chunksPath, chunk),
+				chunkPath: fmt.Sprintf("%s/%08d", chunksPath, chunk),
 				buf:       buf,
 				n:         n,
 			}
