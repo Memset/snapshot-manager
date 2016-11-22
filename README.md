@@ -271,6 +271,9 @@ COPYING file included in this package).
 
 Changelog
 ---------
+
+  * v1.04 - 2016-11-22
+    * Increase digits used in chunk name to fix big upload 
   * v1.03 - 2016-11-07
     * Rebuild with go 1.7.3 to fix macOS Sierra
   * v1.02 - 2015-02-27
